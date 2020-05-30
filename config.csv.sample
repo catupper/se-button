@@ -1,0 +1,4 @@
+key,title,path,volume,bgm_type
+60,se_1,/path/to/se/sound.mp3,1,ShortSE
+61,se_2,/path/to/se/sound.mp3,2,LongSE
+62,se_3,/path/to/se/sound.mp3,3,BGM
