@@ -1,4 +1,7 @@
+use se_button::{BGMType, SEPlayer};
+
 use midir::{Ignore, MidiInput};
+use rodio::Device;
 
 use std::collections::HashMap;
 use std::error::Error;
@@ -8,35 +11,32 @@ use std::sync::{Arc, Mutex};
 #[macro_use]
 extern crate lazy_static;
 
-struct SEPlayer {
-    sound_name: String,
-    cnt: i32,
-}
-
-impl SEPlayer {
-    pub fn new(sound_name: String) -> Self {
-        Self { sound_name, cnt: 0 }
-    }
-
-    pub fn play(&mut self) {
-        println!("Play {} {}", self.sound_name, self.cnt);
-        self.cnt += 1
-    }
-
-    pub fn stop(&mut self) {
-        println!("Stop {} {}", self.sound_name, self.cnt);
-        self.cnt += 1
-    }
-}
-
 lazy_static! {
+    static ref DEVICE: Device = rodio::default_output_device().unwrap();
     static ref SE_DICT: HashMap<u8, Arc<Mutex<SEPlayer>>> = read_dict();
 }
 
 fn read_dict() -> HashMap<u8, Arc<Mutex<SEPlayer>>> {
     let mut dict = HashMap::new();
-    dict.insert(60, Arc::new(Mutex::new(SEPlayer::new("Do".to_string()))));
-    dict.insert(61, Arc::new(Mutex::new(SEPlayer::new("Re".to_string()))));
+    let mut rdr = csv::Reader::from_path("/home/catupper/Documents/se-button/config.csv").unwrap();
+    for result in rdr.records() {
+        let record = result.unwrap();
+        let key = &record[0];
+        let title = &record[1];
+        let path = &record[2];
+        let volume = &record[3];
+        let bgm_type = &record[4];
+        dict.insert(
+            key.parse().unwrap(),
+            Arc::new(Mutex::new(SEPlayer::new(
+                &DEVICE,
+                title.to_string(),
+                path.to_string(),
+                volume.parse().unwrap(),
+                bgm_type.parse().unwrap(),
+            ))),
+        );
+    }
     dict
 }
 
@@ -77,25 +77,73 @@ fn run() -> Result<(), Box<dyn Error>> {
     println!("\nOpening connection");
     let in_port_name = midi_in.port_name(in_port)?;
 
+    let mut bgm_playing: Option<u8> = None;
+
     // _conn_in needs to be a named parameter, because it needs to be kept alive until the end of the scope
     let _conn_in = midi_in.connect(
         in_port,
         "midir-read-input",
         move |_, message, _| {
             let event = message[0];
-            let key = message[1];
             match event {
-                128 => {
+                144 => {
                     //pressed
+                    let key = message[1];
                     if let Some(se_player) = SE_DICT.get(&key) {
-                        se_player.lock().unwrap().play();
+                        let mut se_player = se_player.lock().unwrap();
+                        match se_player.bgm_type {
+                            BGMType::BGM => {
+                                if bgm_playing.is_none() {
+                                    se_player.play();
+                                    bgm_playing = Some(key);
+                                }
+                            }
+                            _ => {
+                                se_player.play();
+                            }
+                        }
                     }
                 }
-                144 => {
+                128 => {
                     //released
+                    let key = message[1];
                     if let Some(se_player) = SE_DICT.get(&key) {
-                        se_player.lock().unwrap().stop();
+                        let mut se_player = se_player.lock().unwrap();
+                        if se_player.bgm_type == BGMType::LongSE {
+                            se_player.stop();
+                        }
                     }
+                }
+                176 => {
+                    //toggle up_or_down
+                    let dir = message[1];
+                    let pos = message[2];
+                    if pos != 127 {
+                        return;
+                    }
+                    if let Some(key) = bgm_playing {
+                        let mut se_player = SE_DICT.get(&key).unwrap().lock().unwrap();
+                        if dir == 1 {
+                            //Up
+                            se_player.volume_up();
+                        }
+                        if dir == 2 {
+                            //Down
+                            se_player.volume_down();
+                        }
+                    }
+                }
+                224 => {
+                    //toggle left_or_right
+                    let pos = (message[1] as i32) * 128 + (message[2] as i32);
+                    if pos != 0 {
+                        return;
+                    }
+                    if let Some(key) = bgm_playing {
+                        let mut se_player = SE_DICT.get(&key).unwrap().lock().unwrap();
+                        se_player.stop();
+                    }
+                    bgm_playing = None;
                 }
                 _ => {}
             }
