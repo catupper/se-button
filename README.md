@@ -10,6 +10,7 @@ config.csvに
 - SEやBGMファイルへのパス
 - ボリューム(1.0が標準）
 - 音源タイプ（BGM,ShortSE,LongSEのいずれか)
+
 を書く．
 
 ## キー
@@ -42,4 +43,4 @@ http://www.asahi-net.or.jp/~HB9T-KTD/music/Japan/Research/DTM/freq_map.html
 ボリュームが0.05未満や1.3以上になろうとするコマンドが入力されたときは無視します．
 
 ## BGM終了
-- MIDIメッセージ [224, 0, 0]でBGMを切ります．ピットホイールを最大限下げるときのメッセージです．
+- MIDIメッセージ [224, 0, 0]でBGMを切ります．ピッチホイールを最大限下げるときのメッセージです．
